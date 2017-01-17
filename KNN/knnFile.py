@@ -93,4 +93,5 @@ class KnnClass(object):
 
 if __name__=="__main__":  
     # Training phase
-    knn_class = KnnClass('iris', '.data', 11)
+    n_classes = 3
+    knn_class = KnnClass('iris', '.data', n_classes)
