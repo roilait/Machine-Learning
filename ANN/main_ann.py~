@@ -1,0 +1,53 @@
+# -*- coding: utf-8 -*-
+import NeuralNetwork as ann
+import ShowGraph as sg
+import os
+import csv
+
+if __name__=="__main__":
+    
+    # ----------------------
+    neural = ann.NeuralNet()
+    graph = sg.plotClass()
+    # 1 - preparing the features for the learning
+    features = { 
+        "fileName": 'iris',
+        "fileExtension": '.data',
+        "inputLen": 2, # the number of the feature for the input
+        "Catg": True  # Do you use categorical data ?    
+    }
+    DataExtraction = neural.feature_extraction(features)
+    '''
+    if (features["inputLen"]==2):
+        graph.plot2D_ANN(DataExtraction[0])
+    elif (features["inputLen"]==3):
+        graph.plot3D_ANN(DataExtraction[0])
+    '''
+    # 2 - Training phase
+    TrainingData = { 
+        "inputData": DataExtraction[0], 
+                     "target_labels": DataExtraction[1], 
+                     "alpha": 0.0001, 
+                     "eta": 0.25
+                   } 
+    #neural.training_phase(TrainingData)
+                 
+    # 3 - Testing phase             
+    TestingData = {
+        "TestingData": DataExtraction[2],
+        "labelsWanted": DataExtraction[3]
+    }              
+    # neural.pre_selection_phase("iris",".data")
+    
+    # Testing phase
+    # neural.testing_phase(TestingData)
+    # for i in range(len(TestingData)):
+        #inputValue = TestingData[i]
+        #Output = neural.testing_phase(inputValue)      
+        #print "predicted output :", Output, "target output", labelsWanted[i]
+    
+    # print Data
+
+    # csvfile = open(os.path.abspath('') + '/Machine_Learning/files/' + files, "r")
+    # lines = csv.reader(csvfile)  
+

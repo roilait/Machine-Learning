@@ -1,0 +1,271 @@
+#!/usr/bin/python
+
+import theano,os,csv,random
+import theano.tensor as T
+import numpy as np
+from itertools import izip
+import matplotlib.pyplot as plt
+
+
+class categorized_data(object):
+    def __init__(self, categorized_Data, categorizedOutput = []):
+        for i in range(len(categorized_Data)):            
+            targetOutput = categorized_Data[i][-1] # get the categorical output
+            if targetOutput not in categorizedOutput:
+                categorizedOutput.append(targetOutput)
+                # CategoryData = ['Iris-setosa', 'Iris-versicolor', 'Iris-virginica']
+            self.CategorizedOutput = categorizedOutput
+        for line in range(len(categorized_Data)):                
+            for cat in range(len(categorizedOutput)):
+                if categorizedOutput[cat] in categorized_Data[line]:
+                    # The category value is converted to numercal value in CategVect
+                    CategVect = ['0']*len(categorizedOutput) 
+                    # Get the position of the categorical output
+                    Index = categorizedOutput.index(categorizedOutput[cat])
+                    # Set the numerical output value to 1
+                    CategVect[Index] = '1'                    
+                    categorized_Data[line].pop() # Remove the categorical targeted value
+                    # Remplace the categorical to new numerical output
+                    categorized_Data[line].extend(CategVect)                    
+                    break
+        self.NumericalData = categorized_Data
+         
+    def numericalData(self):
+        return self.NumericalData, self.CategorizedOutput
+ 
+ 
+      
+class load_data(object):
+    def file_path(self):
+        # find the file contening the Data that we need
+        real_path = os.path.abspath('')
+        sub_path = real_path.split('/')
+        sub_path.pop() # remove the end of the list
+        self.files_path = '/'.join(sub_path)+'/files/'
+                
+        return self.files_path 
+    # features extraction function
+    def feature_extraction(self, features):        
+        self.leng = features["lenght"]            
+        files = features["fileName"]+features["fileExtension"] 
+        csvfile = open(self.file_path() + files, "r")
+        lines = csv.reader(csvfile)
+        Data_set = list(lines)
+        
+        if (features["categorizedData"]): # if we have categorical data 
+            # This function convert the categorical data to numerical data
+            Data_set, categorizedOutput = categorized_data(Data_set).numericalData()
+            self.leng = len(categorizedOutput) + 1
+        ''' dataset[0] = ['5.1', '3.5', '1.4', '0.2', 'Iris-setosa']
+        les chiffres entre les '' sont consideres comme des chaines de 
+        carateres donc il faut les Transformer en nombres '''
+        
+        inputs = [] # preparing the input Data from the system
+        target_label = [] # preparing the outputs from the system
+        for data_line in range(len(Data_set)):
+            for row in range(len(Data_set[data_line])):
+                Data_set[data_line][row ] = float(Data_set[data_line][row])            
+            inputs.append(Data_set[data_line][0:self.leng])
+            target_label.append(Data_set[data_line][self.leng:])
+                        
+        return inputs, target_label
+                            
+                            
+   
+class SingleNeuron(object):
+    def __init__(self, Data, features):
+        self.learning_rate = features["learning_rate"]
+        self.classifier = features["classifier"]
+        self.Data = Data
+        
+        self.inputs, n_in =  np.array(Data[0]), len(np.array(Data[0][0]))
+        self.outputs, n_out = np.array(Data[1]), len(np.array(Data[1][0]))
+        # initialize with 0 the weights W as a matrix of shape (n_in, n_out)
+        self.w = theano.shared(
+               value=np.zeros((n_in, n_out), dtype=theano.config.floatX),
+                  name='Weights', borrow=True)
+        # initialize the biases b as a vector of n_out 0s
+        self.b = theano.shared(
+                value = np.zeros((n_out), dtype=theano.config.floatX),
+                name = 'b', borrow=True)
+                
+        self.params = [self.w, self.b]
+        
+    def errors(self,y): # y is the desired Output
+        """: type y: theano.tensor.TensorType
+        : param y: corresponds to a vector that gives for each example 
+         the correct label"""
+        # check if y has same dimension of output_pred
+        if y.ndim != self.output_pred.ndim:
+            raise TypeError(
+                'y should have the same shape as self.y_pred',
+                  ('y', y.type, 'y_pred', self.output_pred.type)
+              )
+        # check if y is of the correct datatype
+        if y.dtype.startswith('int'):
+            # the T.neq operator returns a vector of 0s and 1s, where 1
+            # represents a mistake in prediction
+            return T.mean(T.neq(self.output_pred, y))
+        else:
+            print #raise NotImplementedError
+    
+    def sigmoid(self,z):
+        return 1/(1 + T.exp(-z))
+        
+    def softmax(self,z):
+        return np.exp(z)/np.sum(np.exp(z))
+        
+    def update_params(self, parameters, gradients):
+        # compute list of fine-tuning updates
+        updates = [
+                     (param, param - gparam*self.learning_rate)
+                      for param, gparam in zip(parameters, gradients)
+                   ]
+        return updates
+        
+    def cost_function(self, x, y):
+        #Define mathematical expression:
+        z = T.dot(x,self.w) + self.b
+        self.output_pred = self.sigmoid(z)
+        if (self.classifier=='regression'):
+            self.output_pred = z # self.sigmoid(z)
+        #cost = -(y*T.log(self.output_pred) + (1-y)*T.log(1-self.output_pred)).sum()
+        
+        return T.sum((y - self.output_pred)**2), self.output_pred # The cost to minimize
+        
+    def Logistic_regression(self, features):
+        n_epochs = features["n_epochs"]
+        #Define theano variables:
+        x = T.matrix('x') # the dim ou the input is N x n_in
+        y = T.matrix('y') # the dim of the desired output is n_out
+        #b = theano.shared(.1)
+        #learning_rate = 0.00001        
+        train_cost, y_hat = self.cost_function(x, y) # training cost
+                        
+        gradients = T.grad(train_cost, self.params)
+        
+        train_model = theano.function(
+                         inputs = [x, y],
+                         outputs = [y_hat, train_cost],
+                         updates = self.update_params(self.params, gradients)
+                      ) 
+                      
+        test_model = theano.function(
+                         inputs = [x, y],
+                         outputs = self.errors(y),
+                         updates = self.update_params(self.params, gradients)
+                      )
+                      
+        validate_model = theano.function(
+                            inputs = [x, y],
+                            outputs = self.errors(y),
+                            updates = self.update_params(self.params, gradients)
+                      )
+        
+        #Iterate through all inputs and find outputs:
+        Cost = []
+        we = []
+        epoch = 0
+        keep_looping = True
+        
+        while (epoch <n_epochs) and (keep_looping):
+            epoch += 1
+            cost = []            
+            for iteration in xrange(len(self.inputs)):
+                Inputs = np.array([self.inputs[iteration]])
+                Outputs = np.array([self.outputs[iteration]])
+                pred, cost_iter = train_model(Inputs, Outputs)
+                #print 'test', Outputs, '--',pred
+                cost.append(cost_iter)
+            Cost.append((sum(cost)))
+            we.append(self.params[0].get_value()[0][0])
+            #print 'wwwwwwwwwwwwwwwwww', len(Cost), '-', len(we)
+            # parameters of the model
+            #self.params = [self.w, self.b]
+            # show the regression figure
+            #self.plot_regressions()
+        plt.plot(we,Cost)     
+
+
+class show_figure(object):
+	def plot_2D(self): 
+		ai = self.params[0].get_value()[0][0]
+		bi = self.params[1].get_value() 
+		print bi
+		plt.axis([1, 7, 2, 5])
+		plt.ion()        
+		xdata, ydata = [],[]
+		for x,y in zip(self.Data[0],self.Data[1]):
+			xdata.append(x[0]), ydata.append(y[0])
+		xi, xj = min(xdata)-.5, max(xdata) + 0.5        
+		yi, yj = np.dot(ai,xi) + bi, np.dot(ai, xj) + bi # y = ai*x + b
+		plt.plot([xi, xj], [yi, yj], 'b')
+		plt.plot(xdata, ydata, '*r')
+		plt.pause(.5)
+		plt.close("all")
+
+if __name__=="__main__":    
+    features = { 
+        "fileName": 'regre', # the name of the file,
+        "fileExtension": '.data', # the extension of the file,        
+        "lenght": 1, # dim of the input vector,
+        "categorizedData": False, # the Data is categorized,
+        "learning_rate": 0.00001,# learning rate,
+        "n_epochs": 1, # the number of the epochs,
+        "classifier": 'regression' # choice regression or classification
+    }
+    load_data = load_data()
+    '''
+    we should fix the lenght to separe the inputs and outputs data
+     from the file'''
+    Data_set = load_data.feature_extraction(features)
+    
+    tstart = SingleNeuron(Data_set,features)
+    
+    tstart.Logistic_regression(features)
+            
+'''
+import theano
+import numpy as np
+import theano.tensor as T
+
+class theano_function(object):
+    
+    def __init__(self, nn_input_dim, nn_output_dim):
+        # initialize with 0 the weights W as a matrix of shape (n_in, n_out)
+        nn_hdim = int(nn_input_dim*nn_output_dim)
+        self.W1 = theano.shared(np.random.randn(nn_input_dim, nn_hdim, 
+                         dtype=theano.config.floatX), name='W1', borrow=True )
+        self.b1 = theano.shared(np.zeros(nn_hdim), name='b1')
+        self.W2 = theano.shared(np.random.randn(nn_hdim, nn_output_dim, 
+                         dtype=theano.config.floatX), name='W2', borrow=True )
+        self.b2 = theano.shared(np.zeros(nn_output_dim), name='b2')
+        
+    def forward_propagation(self, nn_input_dim, nn_hdim, nn_output_dim):
+        # Our data vectors
+        X = T.matrix('X') # matrix of doubles
+        y = T.lvector('y') # vector of int64
+
+        # Note: We are just defining the expressions, nothing is evaluated here!
+        z1 = X.dot(self.W1) + self.b1
+        a1 = T.tanh(z1)
+        z2 = a1.dot(self.W2) + self.b2
+        y_hat = T.nnet.softmax(z2) # output probabilties
+ 
+        # The regularization term (optional)
+        Sum = T.sum(T.sqr(self.W1)) + T.sum(T.sqr(self.W2))
+        loss_reg = 1./num_examples * reg_lambda/2 * Sum 
+        # the loss function we want to optimize
+        loss = T.nnet.categorical_crossentropy(y_hat, y).mean() + loss_reg
+ 
+        # Returns a class prediction
+        prediction = T.argmax(y_hat, axis=1)
+        
+                )inputs = np.array([[0, 0],
+                           [0, 1],
+                           [1, 0], 
+                           [1, 1]])
+        outputs = np.array([[0],[0],[0],[1]])     
+        n_in = 2
+        n_out = 1
+'''        
