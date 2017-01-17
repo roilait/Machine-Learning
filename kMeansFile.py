@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
 
-# https://www.youtube.com/watch?v=RD0nNK51Fp8
-# https://www.youtube.com/watch?v=Ro9EpTzFvoI
-# https://www.youtube.com/watch?v=0MQEt10e4NM
-# https://www.youtube.com/watch?v=rjm4slbER_M
 """
 Created on Tue Jan  3 15:04:38 2017
 
