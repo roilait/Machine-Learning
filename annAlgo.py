@@ -1,12 +1,5 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-# http://jorditorres.org/first-contact-with-tensorflow/
-# https://www.analyticsvidhya.com/blog/2016/10/an-introduction-to-implementing-neural-networks-using-tensorflow/
-# https://www.youtube.com/watch?v=vq2nnJ4g6N0
-# https://github.com/aymericdamien/TensorFlow-Examples/blob/master/examples/4_Utils/tensorboard_advanced.py
-# http://camron.xyz/index.php/2016/10/03/nutshell-all-the-models/
-# https://www.youtube.com/watch?v=8XKSQTCzXEI&list=PLXO45tsB95cJHXaDKpbwr5fC_CCYylw1f&index=11
-# https://www.youtube.com/watch?v=G5RY_SUJih4
 
 import matplotlib.pyplot as plt
 import tensorflow as tf
