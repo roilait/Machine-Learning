@@ -142,7 +142,6 @@ class ClassificationModel(object):
             test_writer = tf.train.SummaryWriter(logs_path + 'logs/test', sess.graph) 
             # PARAMETERS INITIALIZATION                       
             epoch, avg_train_cost, avg_test_cost = 0, [], []
-            epoch_values = []
             while epoch < train_epochs:
                 epoch_values.append(epoch)
                 # LOOP OVER ALL BATCHES
