@@ -4,6 +4,7 @@
 import matplotlib.pyplot as plt
 import tensorflow as tf
 import numpy as np
+import time
 # THE CLASSES IMPORTED
 import getData as getd
 
@@ -15,9 +16,9 @@ class NeuralNetworkModel(object):
         global displayStep, batchSize, train_epochs, regression, learning_rate
         
         batchSize = 10
-        train_epochs = 10
+        train_epochs = 5
         regression = True
-        displayStep = 5 
+        displayStep = 1
         learning_rate = 0.01
         
         train_x, train_y = Data['train_x'], Data['train_y']
@@ -47,8 +48,8 @@ class NeuralNetworkModel(object):
         global inputs, outputs, loss, predict, accuracy, train_step, merged           
         # DEFINE THE INPUTS AND OUTPUTS PLACEHOLDER FOR THE NETWORK AND TENSORBOARD
         with tf.name_scope('inputs'):
-            inputs = tf.placeholder(tf.float32, [None, layers[0]], name = 'x_inputs')
-            outputs = tf.placeholder(tf.float32,[None, layers[-1]], name = 'y_output')
+            inputs = tf.placeholder(tf.float32, shape=[None, layers[0]], name = 'x-inputs')
+            outputs = tf.placeholder(tf.float32,shape=[None, layers[-1]], name = 'y-output')
         # INITIALIZATION OF THE WEIGHTS AND BIASES
         with tf.name_scope('Hyper_params'):
             with tf.name_scope('weights'):
@@ -83,12 +84,12 @@ class NeuralNetworkModel(object):
         merged = tf.merge_all_summaries()
         # ALSO, WE TO INITIALIZE ALL VARIABLES, IT IS A VERY IMPORTANT        
         init_variables = tf.initialize_all_variables()
-         
+        
         # THIS FUNCTION IS CALLED IF WE ARE USING REGRESSION
         if regression:
             RegressionModel.regression(init_variables)
         else:
-            print  ClassificationModel.classification(init_variables)
+            ClassificationModel.classification(init_variables)
 
 
 class RegressionModel(object):
@@ -97,10 +98,11 @@ class RegressionModel(object):
     # -------------------------
     @staticmethod
     def regression(init):
-        # PLOT THE DATA              
+        # TURN ON INTERACTIVE PLOTTING               
         fig = plt.figure()
         ax = fig.add_subplot(1,1,1)
         ax.scatter(train_x, train_y)
+        ax.set_title("REGRESSION", fontsize=18)
         plt.xlim(-1.5,1.5)
         plt.ylim(-0.7, 0.7)
         plt.ion()
@@ -115,7 +117,7 @@ class RegressionModel(object):
                 if step%displayStep==0:
                     train_result = sess.run(merged, feed_dict={inputs:train_x, outputs:train_y})
                     train_writer.add_summary(train_result, step)
-                    # TO VISUALIZE THE RESULT AND IMPROVEMENT                    
+                    # TO VISUALIZE THE RESULT AND IMPROVEMENT                   
                     try:
                         ax.lines.remove(lines[0])
                     except Exception:
@@ -125,7 +127,7 @@ class RegressionModel(object):
                     # PLOT THE PREDICTION
                     lines = ax.plot(train_x, predict_value, 'r-', lw = 3) 
                     plt.pause(0.1)
-                    
+
                    
 class ClassificationModel(object):
     @staticmethod
@@ -134,29 +136,43 @@ class ClassificationModel(object):
             # CREATE INITIALIZED VARIABLE
             sess.run(init) 
             # DELET THE logs FILE, BEFORE TO ADD THE GRAPH
-            getd.DeleteFileOrFolder(logs_path+'logs/')
+            getd.DeleteFileOrFolder(logs_path + 'logs/')
             # SUMMARY WRITER GOES HERE
-            train_writer = tf.train.SummaryWriter(logs_path+'logs/train', sess.graph)
-            test_writer = tf.train.SummaryWriter(logs_path+'logs/test') 
+            train_writer = tf.train.SummaryWriter(logs_path + 'logs/train', sess.graph)
+            test_writer = tf.train.SummaryWriter(logs_path + 'logs/test', sess.graph) 
             # PARAMETERS INITIALIZATION                       
-            epoch = 0
+            epoch, avg_train_cost, avg_test_cost = 0, [], []
+            epoch_values = []
             while epoch < train_epochs:
+                epoch_values.append(epoch)
                 # LOOP OVER ALL BATCHES
-                iters = 0
-                while iters<len(train_x):
-                    start, end = iters, iters + batchSize
-                    batch_x, batch_y = train_x[start:end], train_y[start:end]
-                    _, cost = sess.run([train_step, loss], feed_dict={inputs:batch_x, outputs:batch_y})             
-                        
-                    iters += batchSize
-                
-                train_result = sess.run(merged, feed_dict={inputs:train_x, outputs:train_y})
-                train_writer.add_summary(train_result, epoch)
-                
+                avg_cost = 0.
+                # GET THE TRAING DATA BATCHS
+                batchs_x, batchs_y = Batchs.get_batchs(train_x, train_y, batchSize)
+                total_batchs = len(batchs_x)
+                for batch_x, batch_y in zip(batchs_x, batchs_y): # while iters<len = (train_x):]
+                    _, cost = sess.run([train_step, loss], feed_dict={inputs:batch_x, outputs:batch_y})
+                    avg_cost += cost/total_batchs
+                # TRAINING STEP
+                avg_train_cost.append(avg_cost)
+                if(epoch + 1) % displayStep==0:
+                    train_result = sess.run(merged, feed_dict={inputs:train_x, outputs:train_y})
+                    train_writer.add_summary(train_result, epoch)
+                # TESTING STEP
+                if test_x is not None:                    
+                    if(epoch + 1) % displayStep==0:
+                        test_result, Cost = sess.run([merged,loss], feed_dict={inputs:test_x, outputs:test_y})                    
+                        test_writer.add_summary(test_result, epoch)
+                        avg_test_cost.append(Cost)
+                            
                 print("Epoch:", '%04d' % (epoch+1), "cost=", "{:.3f}".format(cost))
-                
+
                 epoch += 1     
         
+        fig = plt.figure()
+        plt.plot(avg_train_cost, 'b')
+        plt.plot(avg_test_cost, 'r')
+        plt.show()
         
 class ModelClasses(object):       
     # WEIGHT FUNCTION AND INITIALIZATION
@@ -164,7 +180,7 @@ class ModelClasses(object):
     def get_weights(layers):
         # INITIALIZE THE WEIGHTS WITH APPROPRIATE INITIALIZATION
         def init_weights(shape):
-            return tf.Variable(tf.random_normal(shape), name='weighs')
+            return tf.Variable(tf.random_normal(shape), name = 'weighs')
         weights = {'w%s'%i: init_weights([layers[i-1], layers[i]]) for i in xrange(1, len(layers))} 
             
         return  weights      
@@ -173,7 +189,7 @@ class ModelClasses(object):
     def get_biases(layers):
         # INITIALIZE THE BIASES WITH APPROPRIATE INITIALIZATION
         def init_biases(shape):
-            return tf.Variable(tf.random_normal(shape), name='biases')
+            return tf.Variable(tf.random_normal(shape), name = 'biases')
         biases = {'b%s'%i: init_biases([layers[i]]) for i in xrange(1, len(layers))}
         
         return biases    
@@ -185,27 +201,21 @@ class ModelClasses(object):
             loss = tf.reduce_sum(tf.square(outputs-ys_pred), reduction_indices=[1])
         else:
             # SOFTMAX CROSS ENTROPY (COST FUNCTION)
-            #loss = -tf.reduce_sum(ys*tf.log(tf.clip_by_value(ys_pred, 1e-10, 1.0)))
-            loss = -tf.reduce_sum(outputs* tf.log(ys_pred), reduction_indices=[1])
-            # loss = tf.nn.softmax_cross_entropy_with_logits(ys_pred, ys)
-            # loss = -tf.reduce_sum(ys*tf.log(ys_pred), reduction_indices=[1])
-            # loss = tf.nn.softmax_cross_entropy_with_logits(pred_outputs, outputs)          
+            loss = -tf.reduce_sum(outputs* tf.log(ys_pred), reduction_indices=[1])          
             
         return loss    
     
     # CREATE MODEL
     @staticmethod
-    def predict_model(inputs, parms, activation_function):        
+    def predict_model(inputs, parms, activation_function):
         I, Ls = 1, {'layer%s'%ls:'' for ls in xrange(1, len(parms['weights'])+1)}
         Wgs, bias = parms['weights'], parms['biases']
         act_fction_HLayers = activation_function['actFctionHL']
         act_fct_out = activation_function['actFctionOut']         
         while I < len(parms['weights']): 
             # HISTOGRAM OF THE WEIGHTS AND BIASES
-            #variable_summaries(W['w%s'%(I)])
-            #variable_summaries(bias['b%s'%(I)])
-            #tf.histogram_summary('layer%s '%(I)+'/Weights%s'%(I), W['w%s'%(I)])
-            #tf.histogram_summary('layer%s '%(I)+'/biases%s'%(I), bias['b%s'%(I)])
+            tf.histogram_summary('layer%s '%(I)+'/Weights%s'%(I), Wgs['w%s'%(I)])
+            tf.histogram_summary('layer%s '%(I)+'/biases%s'%(I), bias['b%s'%(I)])
             if (I==1):
                 Ls['layer%s'%(I)] = tf.add(tf.matmul(inputs, Wgs['w%s'%(I)]), bias['b%s'%(I)])
                 if act_fction_HLayers is not None:
@@ -223,22 +233,18 @@ class ModelClasses(object):
         # COMPUTING THE OUTPUT LAYER VALUE  
         prediction = tf.add(tf.matmul(Ls['layer%s'%(I-1)], Wgs['w%s'%(I)]), bias['b%s'%(I)])
         # CREATE A SAMMARY TO VISUALIZE THE FIRST LAYER RELU ACTIVATION
-        # variable_summaries(W['w%s'%(I)])
-        # variable_summaries(bias['b%s'%(I)])
-        # tf.histogram_summary('layer%s '%I+'/Weights%s'%(I), W['w%s'%I])
-        # tf.histogram_summary('layer%s '%I+'/biases%s'%(I), bias['b%s'%I])
+        tf.histogram_summary('layer%s '%I+'/Weights%s'%(I), Wgs['w%s'%I])
+        tf.histogram_summary('layer%s '%I+'/biases%s'%(I), bias['b%s'%I])
         if act_fct_out is not None:
             prediction = act_fct_out(prediction)
                             
         return prediction
-    
-    
-    @staticmethod    
-    def compute_accuracy(v_xs,v_ys, sess):
-        # % OF CORRECT ANSWERS FOUND IN BATCH
-        y_pred = sess.run(predict, feed_dict = {xs: v_xs})
-        is_correct = tf.equal(tf.argmax(y_pred, 1), tf.argmax(v_ys, 1))
-        accuracy = tf.reduce_mean(tf.cast(is_correct, tf.float32))
-        result = sess.run(accuracy,feed_dict = {xs: v_xs, ys: v_ys})
+
+class Batchs(object):
+    @staticmethod
+    def get_batchs(data_x, data_y, batchSize):
+        m = len(data_x)
+        batchs_x = [data_x[i:i+batchSize] for i in xrange(0, m, batchSize)]
+        batchs_y = [data_y[j:j+batchSize] for j in xrange(0, m, batchSize)]
         
-        return result
+        return batchs_x, batchs_
