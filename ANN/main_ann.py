@@ -9,32 +9,28 @@ import NeuralNetwork as ann
 import annAlgo as cls
 import Regression as reg
 import numpy as np
+import tensorflow as tf
 # Create random data with numpy
 
 if __name__=="__main__":  
     # SET THE PARAMETERS 
-    feats = { 'TrainEpochs':300,
-              'TrainBatchSize':20, 
-              'TestBatchSize':5,
-              'displayStep':1, 
-              'learning_rate':0.001,
-              'k_fold':5
-             }
-    n_classes = 10 # Nber of classes
-    n_feats = 10 # nber of features
+    dictInput = {'batchSize': 10,
+                 'trainEpochs': 4,
+                 'regression': False,
+                 'displayStep': 1,
+                 'learningRate': 0.01,
+                 'useDropout': True,
+                 'keepProbValue':0.5
+                }
+    # NUMBER OF CLASSES
+    n_classes = 10 
     Data = getd.CvsFileMnist.manupulations(n_classes)
-
-    #print '==================='
     # -----------------------------------------------------------
     # ----------------------- mode training ---------------------
     # -----------------------------------------------------------    
-    feats['hidden_layers'] = [256] # set the layers of the neural
     hidden_layers = [256, 256]
 
     # cls.Cls_model(Data, feats, hidden_layers)
-    cls.NeuralNetworkModel(Data, hidden_layers)
-
-    # CROSS VALIDATION METHOD
-    #cv.CrossValidation(Data, feats)
-    
-    # algo.CrossValidation(NetImageData_3, k_fold, feats)   
+    activation_function = {'actFctionHL':tf.nn.sigmoid, 'actFctionOut': tf.nn.softmax}
+    cls.SaverNeuralNetworkModel(Data, hidden_layers, dictInput, activation_function)
+ 
