@@ -9,30 +9,44 @@ import time
 import getData as getd
 
 logs_path = getd.Path.find_file_path()
-
-class NeuralNetworkModel(object):
-    def __init__(self, Data, HLayers):
+# -------------------------------
+# ----------- Class -------------
+# -------------------------------
+class SaverNeuralNetworkModel(object):
+    def __init__(self, Data, HLayers, dictInput, activation_function):
+        Training.training(Data, HLayers, dictInput, activation_function)
+# ---------------------
+# ------ Class --------
+# ---------------------
+class Training(object):
+    @staticmethod
+    def training(Data, HLayers, dictInput, activation_function):
         global train_x, train_y, test_x, test_y, valid_x, valid_y 
         global displayStep, batchSize, train_epochs, regression, learning_rate
+        global use_dropout, kp_val 
         
-        batchSize = 10
-        train_epochs = 5
-        regression = True
-        displayStep = 1
-        learning_rate = 0.01
+        batchSize = dictInput['batchSize']
+        train_epochs = dictInput['trainEpochs']
+        regression = dictInput['regression']
+        displayStep = dictInput['displayStep']
+        learning_rate = dictInput['learningRate']
+        use_dropout = dictInput['useDropout']
+        kp_val = dictInput['keepProbValue']
         
         train_x, train_y = Data['train_x'], Data['train_y']
         test_x, test_y = Data['test_x'], Data['test_y']
         valid_x, valid_y = Data['valid_x'], Data['valid_y']
         
-        activation_function = {'actFctionHL':tf.nn.sigmoid, 'actFctionOut': tf.nn.softmax}
+        # activation_function = {'actFctionHL':tf.nn.sigmoid, 'actFctionOut': tf.nn.softmax}
         if regression:
-            activation_function = {'actFctionHL':tf.nn.relu, 'actFctionOut': None}
+            activation_function['actFctionOut'] = None
             # MAKE UP SOME REAL DATA
-            train_x = np.linspace(-1, 1, 300)[:,np.newaxis]
-            noise = np.random.normal(0, 0.05, train_x.shape)
+            train_x = np.linspace(-1,1,300)[:,np.newaxis]
+            noise = np.random.normal(0,0.05, train_x.shape)
             train_y = np.square(train_x)-0.5 + noise 
             HLayers = [10]
+            train_epochs = 1000
+            use_dropout = False
         
         n_inputs, n_classes = len(train_x[0]), len(train_y[0]) 
         # PREPARING THE LAYERS LIST OF THE NETWORK 
@@ -41,15 +55,16 @@ class NeuralNetworkModel(object):
         layers.extend(HLayers)
         layers.append(n_classes)
         # NEURAL NETWORK MODEL CALLED
-        NeuralNetworkModel.neural_network_model(layers, activation_function)
+        Training.neural_network_model(layers, activation_function)
         
     @staticmethod
     def neural_network_model(layers, activation_function, Lys = []):
-        global inputs, outputs, loss, predict, accuracy, train_step, merged           
+        global inputs, outputs, loss, predict, accuracy, train_step, merged, keep_prob, weights            
         # DEFINE THE INPUTS AND OUTPUTS PLACEHOLDER FOR THE NETWORK AND TENSORBOARD
         with tf.name_scope('inputs'):
             inputs = tf.placeholder(tf.float32, shape=[None, layers[0]], name = 'x-inputs')
-            outputs = tf.placeholder(tf.float32,shape=[None, layers[-1]], name = 'y-output')
+            outputs = tf.placeholder(tf.float32, shape=[None, layers[-1]], name = 'y-output')
+            keep_prob = tf.placeholder(tf.float32)
         # INITIALIZATION OF THE WEIGHTS AND BIASES
         with tf.name_scope('Hyper_params'):
             with tf.name_scope('weights'):
@@ -65,6 +80,9 @@ class NeuralNetworkModel(object):
         # COMPUTE THE COST FUNCTION
         with tf.name_scope('Loss'):
             loss = ModelClasses.cost_function(outputs, predict)
+            # Loss function using L2 Regularization
+              # regularizer = tf.nn.l2_loss(weights)
+              # loss = tf.reduce_mean(loss + beta * regularizer)
             loss = tf.reduce_mean(loss)        
         # COMPUTE THE GRADIENTS
         with tf.name_scope('Train_step'):
@@ -90,8 +108,12 @@ class NeuralNetworkModel(object):
             RegressionModel.regression(init_variables)
         else:
             ClassificationModel.classification(init_variables)
+        # SAVE THE HYPER-PARAMETERS
+        # weights = sess.run(weights)
 
-
+# ---------------------------
+# --------- Class -----------
+# ---------------------------
 class RegressionModel(object):
     # -------------------------
     # -- REGRESSION FUNCTION --
@@ -112,7 +134,7 @@ class RegressionModel(object):
             # DELET THE logs FILE, BEFORE TO ADD THE GRAPH
             getd.DeleteFileOrFolder(logs_path+'logs/')
             train_writer = tf.train.SummaryWriter(logs_path+'logs/train', sess.graph)
-            for step in xrange(1000):
+            for step in xrange(train_epochs):
                 sess.run(train_step, feed_dict={inputs:train_x,outputs:train_y})
                 if step%displayStep==0:
                     train_result = sess.run(merged, feed_dict={inputs:train_x, outputs:train_y})
@@ -127,11 +149,20 @@ class RegressionModel(object):
                     # PLOT THE PREDICTION
                     lines = ax.plot(train_x, predict_value, 'r-', lw = 3) 
                     plt.pause(0.1)
-
-                   
+# --------------------------------
+# ----------- Class --------------
+# --------------------------------                   
 class ClassificationModel(object):
     @staticmethod
     def classification(init):
+        plt.ion()
+        # Create the main, super plot
+        fig = plt.figure()
+        # Create two subplots on their own axes and give titles
+        ax = plt.subplot("111")
+        ax.set_title("TRAINING AND TESTING COSTS", fontsize=18)
+        plt.tight_layout()
+        
         with tf.Session() as sess:
             # CREATE INITIALIZED VARIABLE
             sess.run(init) 
@@ -142,37 +173,64 @@ class ClassificationModel(object):
             test_writer = tf.train.SummaryWriter(logs_path + 'logs/test', sess.graph) 
             # PARAMETERS INITIALIZATION                       
             epoch, avg_train_cost, avg_test_cost = 0, [], []
+            avg_train_accur, avg_test_accur = [], []
+            epoch_values = []
             while epoch < train_epochs:
                 epoch_values.append(epoch)
                 # LOOP OVER ALL BATCHES
-                avg_cost = 0.
+                avg_cost, avg_accu = 0., 0.
                 # GET THE TRAING DATA BATCHS
                 batchs_x, batchs_y = Batchs.get_batchs(train_x, train_y, batchSize)
-                total_batchs = len(batchs_x)
-                for batch_x, batch_y in zip(batchs_x, batchs_y): # while iters<len = (train_x):]
-                    _, cost = sess.run([train_step, loss], feed_dict={inputs:batch_x, outputs:batch_y})
-                    avg_cost += cost/total_batchs
+                #total_batchs = len(batchs_x)
                 # TRAINING STEP
-                avg_train_cost.append(avg_cost)
+                for x_batch, y_batch in zip(batchs_x, batchs_y): # while iters<len = (train_x):]
+                    sess.run(train_step, feed_dict={inputs: x_batch, outputs: y_batch,keep_prob:kp_val})
+
                 if(epoch + 1) % displayStep==0:
-                    train_result = sess.run(merged, feed_dict={inputs:train_x, outputs:train_y})
+                    cost,accur = sess.run([loss,accuracy],feed_dict={inputs:train_x,outputs:train_y,keep_prob:1.0})
+                    avg_cost += cost
+                    avg_accu += accur
+                    
+                    avg_train_cost.append(avg_cost)
+                    avg_train_accur.append(avg_accu)
+                    
+                    train_result = sess.run(merged, feed_dict={inputs:train_x,outputs:train_y,keep_prob:1.0})
                     train_writer.add_summary(train_result, epoch)
                 # TESTING STEP
                 if test_x is not None:                    
                     if(epoch + 1) % displayStep==0:
-                        test_result, Cost = sess.run([merged,loss], feed_dict={inputs:test_x, outputs:test_y})                    
+                        test_result, Cost, Accur = sess.run([merged,loss, accuracy],feed_dict={inputs:test_x,outputs:test_y,keep_prob:1.0})                    
                         test_writer.add_summary(test_result, epoch)
                         avg_test_cost.append(Cost)
-                            
-                print("Epoch:", '%04d' % (epoch+1), "cost=", "{:.3f}".format(cost))
+                        avg_test_accur.append(Accur)
+                
+                
+                # Plot progress to our two subplots
+                trcostLine, = ax.plot(epoch_values, avg_train_cost, 'r')
+                tecostLine, = ax.plot(epoch_values, avg_test_cost, 'b')
+                fig.canvas.draw()
+                time.sleep(1)
 
-                epoch += 1     
-        
-        fig = plt.figure()
-        plt.plot(avg_train_cost, 'b')
-        plt.plot(avg_test_cost, 'r')
-        plt.show()
-        
+                print("Epoch:", '%04d' % (epoch+1), "cost=", "{:.3f}".format(avg_train_cost[-1]))
+                epoch += 1 
+            # SAVE THE PARAMETERS OF THE NETWORK
+            #weights = sess.run(weights)
+            #saver = tf.train.Saver(var_list=weights)
+            #saver.save(sess, getd.Path.find_file_path()+"paramSaved/saveNetParms.txt")
+            '''
+            L = [784, 256, 256, 10]
+            weights = {'w%s'%i:tf.Variable(tf.zeros([L[i-1], L[i]]), dtype=tf.float32, name='weights') 
+                                                                                for i in xrange(1, len(L))}
+            biases = {'b%s'%j:tf.Variable(tf.zeros([L[j]]), dtype=tf.float32, name='biases') 
+                                                                               for j in xrange(1, len(L))}
+            saver.restore(sess, getd.Path.find_file_path()+"paramSaved/saveNetParms.ckpt")
+            print 'weights:', sess.run(weights)
+            print 'biases:', sess.run(biases)
+            '''
+
+# ------------------------
+# -------- Class ---------
+# ------------------------
 class ModelClasses(object):       
     # WEIGHT FUNCTION AND INITIALIZATION
     @staticmethod 
@@ -180,8 +238,7 @@ class ModelClasses(object):
         # INITIALIZE THE WEIGHTS WITH APPROPRIATE INITIALIZATION
         def init_weights(shape):
             return tf.Variable(tf.random_normal(shape), name = 'weighs')
-        weights = {'w%s'%i: init_weights([layers[i-1], layers[i]]) for i in xrange(1, len(layers))} 
-            
+        weights = {'w%s'%i: init_weights([layers[i-1], layers[i]]) for i in xrange(1, len(layers))}             
         return  weights      
     # BIASES FUNCTION AND INITIALIZATION
     @staticmethod 
@@ -189,8 +246,7 @@ class ModelClasses(object):
         # INITIALIZE THE BIASES WITH APPROPRIATE INITIALIZATION
         def init_biases(shape):
             return tf.Variable(tf.random_normal(shape), name = 'biases')
-        biases = {'b%s'%i: init_biases([layers[i]]) for i in xrange(1, len(layers))}
-        
+        biases = {'b%s'%i: init_biases([layers[i]]) for i in xrange(1, len(layers))}        
         return biases    
     # COMPUT THE COST FUNCTION
     @staticmethod
@@ -200,11 +256,9 @@ class ModelClasses(object):
             loss = tf.reduce_sum(tf.square(outputs-ys_pred), reduction_indices=[1])
         else:
             # SOFTMAX CROSS ENTROPY (COST FUNCTION)
-            loss = -tf.reduce_sum(outputs* tf.log(ys_pred), reduction_indices=[1])          
-            
-        return loss    
-    
-    # CREATE MODEL
+            loss = -tf.reduce_sum(outputs* tf.log(ys_pred), reduction_indices=[1])           
+        return loss
+    # CREATE THE MODEL
     @staticmethod
     def predict_model(inputs, parms, activation_function):
         I, Ls = 1, {'layer%s'%ls:'' for ls in xrange(1, len(parms['weights'])+1)}
@@ -217,28 +271,40 @@ class ModelClasses(object):
             tf.histogram_summary('layer%s '%(I)+'/biases%s'%(I), bias['b%s'%(I)])
             if (I==1):
                 Ls['layer%s'%(I)] = tf.add(tf.matmul(inputs, Wgs['w%s'%(I)]), bias['b%s'%(I)])
+                # REGULARIZATION DROPOUT
+                if use_dropout:
+                    Ls['layer%s'%(I)] = tf.nn.dropout(Ls['layer%s'%(I)], keep_prob)
+                # PASS THROUGH THE ACTIVATION FUNCTION
                 if act_fction_HLayers is not None:
                     Ls['layer%s'%(I)] = act_fction_HLayers(Ls['layer%s'%(I)])
                 # CREATE A SAMMARY TO VISUALIZE THE FIRST LAYER RELU ACTIVATION
                 tf.histogram_summary("activation_layer %s"%(I), Ls['layer%s'%(I)])
             else:
                 Ls['layer%s'%(I)] = tf.add(tf.matmul(Ls['layer%s'%(I-1)], Wgs['w%s'%(I)]), bias['b%s'%(I)])
+                # REGULARIZATION DROPOUT
+                if use_dropout:
+                    Ls['layer%s'%(I)] = tf.nn.dropout(Ls['layer%s'%(I)], keep_prob)
+                # PASS THROUGH THE ACTIVATION FUNCTION
                 if act_fction_HLayers is not None:
                     Ls['layer%s'%(I)] = act_fction_HLayers(Ls['layer%s'%(I)])
                 # CREATE A SAMMARY TO VISUALIZE THE FIRST LAYER RELU ACTIVATION
-                tf.histogram_summary("activation_layer%s "%(I), Ls['layer%s'%(I)])
-            I += 1   
-             
+                tf.histogram_summary("activation_layer%s "%(I), Ls['layer%s'%(I)])            
+            I += 1                
         # COMPUTING THE OUTPUT LAYER VALUE  
         prediction = tf.add(tf.matmul(Ls['layer%s'%(I-1)], Wgs['w%s'%(I)]), bias['b%s'%(I)])
+        # PASS THROUGH THE ACTIVATION FUNCTION
+        #if use_dropout:
+            #prediction = tf.nn.dropout(prediction, keep_prob)
+        if act_fct_out is not None:
+            prediction = act_fct_out(prediction)            
         # CREATE A SAMMARY TO VISUALIZE THE FIRST LAYER RELU ACTIVATION
         tf.histogram_summary('layer%s '%I+'/Weights%s'%(I), Wgs['w%s'%I])
         tf.histogram_summary('layer%s '%I+'/biases%s'%(I), bias['b%s'%I])
-        if act_fct_out is not None:
-            prediction = act_fct_out(prediction)
                             
         return prediction
-
+# -------------------
+# ----- Class -------
+# -------------------
 class Batchs(object):
     @staticmethod
     def get_batchs(data_x, data_y, batchSize):
@@ -246,4 +312,19 @@ class Batchs(object):
         batchs_x = [data_x[i:i+batchSize] for i in xrange(0, m, batchSize)]
         batchs_y = [data_y[j:j+batchSize] for j in xrange(0, m, batchSize)]
         
-        return batchs_x, batchs_
+        return batchs_x, batchs_y
+# -------------------
+# ----- Class -------
+# -------------------
+class RestoreNeuralNetworkModel(object):
+    def __init__(self, L):
+        # RESTORE THE SHAPE AND SAME DTYPE FOR THE VARIABLES
+        weights = {'w%s'%i:tf.Variable(tf.zeros([L[i-1], L[i]]), dtype=tf.float32, name='weights') 
+                                                                                for i in xrange(1, len(L))}
+        biases = {'b%s'%j:tf.Variable(tf.zeros([L[j]]), dtype=tf.float32, name='biases') 
+                                                                               for j in xrange(1, len(L))}
+        saver = tf.train.Saver()
+        with tf.Session as sess:
+            saver.restore(sess, getd.Path.find_file_path()+"paramSaved/saveNetParms.ckpt")
+            print 'weights:', sess.run(weights)
+            print 'biases:', sess.run(biases)
