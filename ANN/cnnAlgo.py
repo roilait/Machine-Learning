@@ -67,23 +67,3 @@ class ConvNet(object):
             else:
                 out_conv['y%s'%(conv)] = tf.nn.relu(ConvNet.conv2d(out_pool['y%s'%(conv-1)], W_conv, sx, sy) + b_conv)
                 out_pool['y%s'%(conv)] = ConvNet.max_pool_2x2(out_conv['y%s'%(conv)], kx, ky)
-                
-    K, L, M = 4, 8, 12
-    input_channels = [1]
-    output_channels = [K, L, M]
-    inputs = tf.placeholder(tf.float32, shape=[None, 784])
-    outputs = tf.placeholder(tf.float32, shape=[None, 10])
-    keep_prob = tf.placeholder(tf.float32)
-    x_image = tf.reshape(inputs, [-1,28,28,1])
-    # CONV1 LAYER #
-    K = 32
-    W_conv1 = weight_variable([5,5,1,K]) # 5x5:filter size 5x5, 1:input channels,K: output channels 
-    b_conv1 = bias_variable([K])
-    h_conv1 = tf.nn.relu(fct_conv2d(x_image, W_conv1) + b_conv1)# output size 28x28x32
-    h_pool1 = max_pool_2x2(h_conv1)
-    
-
-    
-    
-    
-
