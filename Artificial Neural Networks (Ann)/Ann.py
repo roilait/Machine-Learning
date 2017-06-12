@@ -1,8 +1,6 @@
 # =========================
 # Artificial Neural Network
 # =========================
-# https://www.youtube.com/watch?v=2pQOXjpO_u0
-# http://parneetk.github.io/blog/neural-networks-in-keras/
 
 # Importing the libraries
 import numpy as np
